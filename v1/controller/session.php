@@ -100,9 +100,9 @@ function handle_post($db) {
     }
 
     // create access token and refresh token - add unix time to end to eliminate chance of stale token usage
-    $access_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24).time()));
+    $access_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24)).time());
     $access_token_expiry_seconds = 60 * 60; // 1 hour
-    $refresh_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24).time()));
+    $refresh_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24)).time());
     $refresh_token_expiry_seconds = 60 * 60 * 24 * 7 * 2; // 2 weeks
     
   }
@@ -240,9 +240,9 @@ function handle_patch($db) {
       if (strtotime($returned_refresh_token_expiry) < time()) returnErrorResponse(401, 'Refresh token has expired - please log in again');
 
       // create access token and refresh token - add unix time to end to eliminate chance of stale token usage
-      $access_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24).time()));
+      $access_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24)).time());
       $access_token_expiry_seconds = 60 * 60; // 1 hour
-      $refresh_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24).time()));
+      $refresh_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24)).time());
       $refresh_token_expiry_seconds = 60 * 60 * 24 * 7 * 2; // 2 weeks
 
       $query = $db->prepare('
