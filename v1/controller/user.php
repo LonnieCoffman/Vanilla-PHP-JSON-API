@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST'){
 }
 
 // header must be json
-if (isset($_SERVER['CONTENT_TYPE']) && $_SERVER['CONTENT_TYPE'] !== 'application/json') {
+if ($_SERVER['CONTENT_TYPE'] !== 'application/json') {
   returnErrorResponse(400, 'Content type header is not set to JSON');
 }
 
@@ -55,7 +55,6 @@ else {
 }
 
 if (!empty($errors)) {
-  echo '1';
   returnErrorResponse(400, $errors);
 }
 try {

@@ -15,11 +15,11 @@
   }
 
   $method = $_SERVER['REQUEST_METHOD'];
-  $method   === 'GET'    ? handle_get($read_db)
-  : $method === 'POST'   ? handle_post($write_db)
-  : $method === 'DELETE' ? handle_delete($write_db)
-  : $method === 'PATCH'  ? handle_patch($write_db)
-  : returnErrorResponse(405, 'Request method not allowed');
+  if ($method === 'GET') handle_get($read_db);
+  else if ($method === 'POST') handle_post($write_db);
+  else if ($method === 'DELETE') handle_delete($write_db);
+  else if ($method === 'PATCH') handle_patch($write_db);
+  else returnErrorResponse(405, 'Request method not allowed');
 
   /*
    * GET REQUESTS
@@ -102,7 +102,6 @@
         $total_tasks = intval($row['total_tasks']);
         $total_pages = ceil($total_tasks/$limit);
         if ($total_pages == 0) $total_pages = 1;
-        echo $total_tasks;
 
         // handle page out of range of available pages
         if ($page > $total_pages || $page < 1) returnErrorResponse(404, 'Page not found');
@@ -312,8 +311,14 @@
         $query_bind[] = $json_data->completed;
       }
 
+      // must provide data to update
       if (sizeof($query_values) === 0) {
         returnErrorResponse(400, 'No task fields provided');
+      }
+
+      // title must be within 1 to 255 characters
+      if (strlen($json_data->title) < 1 || strlen($json_data->title) > 255) {
+        returnErrorResponse(400, 'Task title error');
       }
 
       array_push($query_bind, $taskid);
