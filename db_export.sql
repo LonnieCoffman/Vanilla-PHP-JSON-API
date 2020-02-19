@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:8889
--- Generation Time: Feb 18, 2020 at 05:40 PM
+-- Generation Time: Feb 19, 2020 at 02:54 AM
 -- Server version: 5.7.26
 -- PHP Version: 7.3.8
 
@@ -43,6 +43,7 @@ CREATE TABLE `sessions` (
 
 CREATE TABLE `tasks` (
   `id` bigint(20) NOT NULL,
+  `userid` bigint(20) NOT NULL,
   `title` varchar(255) NOT NULL,
   `description` mediumtext,
   `deadline` datetime DEFAULT NULL,
@@ -81,7 +82,8 @@ ALTER TABLE `sessions`
 -- Indexes for table `tasks`
 --
 ALTER TABLE `tasks`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `taskuserid_fk` (`userid`);
 
 --
 -- Indexes for table `users`
@@ -121,6 +123,12 @@ ALTER TABLE `users`
 --
 ALTER TABLE `sessions`
   ADD CONSTRAINT `sessionuserid_fk` FOREIGN KEY (`userid`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `tasks`
+--
+ALTER TABLE `tasks`
+  ADD CONSTRAINT `taskuserid_fk` FOREIGN KEY (`userid`) REFERENCES `users` (`id`);
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;

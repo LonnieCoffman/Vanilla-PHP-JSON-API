@@ -14,17 +14,59 @@
     returnErrorResponse(500, 'Database connection error');
   }
 
+  /*
+   * VERIFY USER IS AUTHENTICATED
+   */
+  // get authentication header
+  if (!isset($_SERVER['HTTP_AUTHORIZATION'])) returnErrorResponse(401, 'Access token is missing from the header');
+  if (strlen($_SERVER['HTTP_AUTHORIZATION']) < 1) returnErrorResponse(401, 'Access token cannot be blank');
+
+  $access_token = $_SERVER['HTTP_AUTHORIZATION'];
+
+  try {
+    $query = $write_db->prepare('
+      SELECT s.userid, s.accesstokenexpiry, u.useractive, u.loginattempts
+      FROM sessions as s, users as u
+      WHERE u.id = s.userid
+      AND s.accesstoken = :access_token 
+    ');
+    $query->execute([$access_token]);
+
+    $row_count = $query->rowCount();
+
+    // access token invalid
+    if ($row_count === 0) returnErrorResponse(401, 'Invalid access token');
+
+    $row = $query->fetch(PDO::FETCH_ASSOC);
+
+    $returned_user_id = $row['userid'];
+    $returned_access_token_expiry = $row['accesstokenexpiry'];
+    $returned_useractive = $row['useractive'];
+    $returned_login_attempts = $row['loginattempts'];
+
+    if ($returned_useractive !== 'Y') returnErrorResponse(401, 'User account not active');
+
+    if ($returned_login_attempts >= 3) returnErrorResponse(401, 'User account is currently locked out');
+
+    if (strtotime($returned_access_token_expiry) < time()) returnErrorResponse(401, 'Access token has expired');
+
+  }
+  catch (PDOException $e) {
+    returnErrorResponse(500, $e);
+  }
+
+  // check methods
   $method = $_SERVER['REQUEST_METHOD'];
-  if ($method === 'GET') handle_get($read_db);
-  else if ($method === 'POST') handle_post($write_db);
-  else if ($method === 'DELETE') handle_delete($write_db);
-  else if ($method === 'PATCH') handle_patch($write_db);
+  if ($method === 'GET') handle_get($read_db, $returned_user_id);
+  else if ($method === 'POST') handle_post($write_db, $returned_user_id);
+  else if ($method === 'DELETE') handle_delete($write_db, $returned_user_id);
+  else if ($method === 'PATCH') handle_patch($write_db, $returned_user_id);
   else returnErrorResponse(405, 'Request method not allowed');
 
   /*
    * GET REQUESTS
    */
-  function handle_get($db) {
+  function handle_get($db, $returned_user_id) {
     
     /*
      * GET SINGLE TASK
@@ -40,8 +82,9 @@
           SELECT id, title, description, DATE_FORMAT(deadline, "%m/%d/%Y %H:%i") AS deadline, completed
           FROM tasks
           WHERE id = :taskid
+          AND userid = :returned_user_id
         ');
-        $query->execute([$taskid]);
+        $query->execute([$taskid, $returned_user_id]);
   
         $row_count = $query->rowCount();
   
@@ -93,11 +136,11 @@
         }
 
         // complete, incomplete or all 
-        $query_completed = $completed === 'all' ? '' : ' WHERE completed = :completed';
+        $query_completed = $completed === 'all' ? '' : ' AND completed = :completed';
   
         // get tasks and total pages
-        $query = $db->prepare('SELECT count(id) AS total_tasks fROM tasks'.$query_completed);
-        $query->execute($completed === 'all' ? [] : [$completed]);
+        $query = $db->prepare('SELECT count(id) AS total_tasks fROM tasks'.$query_completed.' WHERE userid = :returned_user_id');
+        $query->execute($completed === 'all' ? [$returned_user_id] : [$completed, $returned_user_id]);
         $row = $query->fetch(PDO::FETCH_ASSOC);
         $total_tasks = intval($row['total_tasks']);
         $total_pages = ceil($total_tasks/$limit);
@@ -112,11 +155,12 @@
         
         $query = $db->prepare('
           SELECT id, title, description, DATE_FORMAT(deadline, "%m/%d/%Y %H:%i") AS deadline, completed
-          FROM tasks'
+          FROM tasks
+          WHERE userid = :returned_user_id'
           .$query_completed
           .$query_limit
         );
-        $query->execute($completed === 'all' ? [$limit, $offset] : [$completed, $limit, $offset]);
+        $query->execute($completed === 'all' ? [$returned_user_id, $limit, $offset] : [$returned_user_id, $completed, $limit, $offset]);
   
         $row_count = $query->rowCount();
   
@@ -159,7 +203,7 @@
   /*
    * POST REQUESTS
    */
-  function handle_post($db) {
+  function handle_post($db, $returned_user_id) {
 
     if ($_SERVER['CONTENT_TYPE'] !== 'application/json') {
       returnErrorResponse(400, 'Content type header is not set to JSON');
@@ -197,12 +241,12 @@
 
       $query = $db->prepare('
         INSERT INTO tasks (
-          title, description, deadline, completed
+          userid, title, description, deadline, completed
         ) VALUES (
-          :title, :description, STR_TO_DATE(:deadline, "%m/%d/%Y %H:%i"), :completed
+          :returned_user_id, :title, :description, STR_TO_DATE(:deadline, "%m/%d/%Y %H:%i"), :completed
         )
       ');
-      $query->execute([$title, $description, $deadline, $completed]);
+      $query->execute([$returned_user_id, $title, $description, $deadline, $completed]);
       $row_count = $query->rowCount();
 
       if ($row_count === 0) {
@@ -252,7 +296,7 @@
   /*
    * PATCH REQUESTS
    */
-  function handle_patch($db) {
+  function handle_patch($db, $returned_user_id) {
     if ($_SERVER['CONTENT_TYPE'] !== 'application/json') {
       returnErrorResponse(400, 'Content type header is not set to JSON');
     }
@@ -321,10 +365,10 @@
         returnErrorResponse(400, 'Task title error');
       }
 
-      array_push($query_bind, $taskid);
+      array_push($query_bind, $taskid, $returned_user_id);
 
       $query = $db->prepare('
-        UPDATE tasks SET '.implode(',', $query_values).' WHERE id = :taskid
+        UPDATE tasks SET '.implode(',', $query_values).' WHERE id = :taskid AND userid = :returned_user_id
       ');
       $query->execute($query_bind);
 
@@ -373,7 +417,7 @@
   /*
    * DELETE REQUESTS
    */
-  function handle_delete($db) {
+  function handle_delete($db, $returned_user_id) {
     if (array_key_exists('taskid', $_GET)) {
       $taskid = $_GET['taskid'];
       if ($taskid == '' || !is_numeric($taskid)) {
@@ -386,8 +430,9 @@
         $query = $db->prepare('
           DELETE FROM tasks
           WHERE id = :taskid
+          AND userid = :returned_user_id
         ');
-        $query->execute([$taskid]);
+        $query->execute([$taskid, $returned_user_id]);
   
         $row_count = $query->rowCount();
   

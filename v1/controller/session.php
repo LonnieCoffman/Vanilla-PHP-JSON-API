@@ -99,11 +99,13 @@ function handle_post($db) {
       returnErrorResponse(401, 'Username or Password is incorrect');
     }
 
-    // create access token and refresh token - add unix time to end to eliminate chance of stale token usage
+    $current_time = date('Y-m-d H:i:s',strtotime('+0 seconds',time()));
     $access_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24)).time());
-    $access_token_expiry_seconds = 60 * 60; // 1 hour
+    $access_token_expiry = date('Y-m-d H:i:s',strtotime('+1 hour',strtotime($current_time)));
+    $access_token_expiry_seconds = 60 * 60;
     $refresh_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24)).time());
-    $refresh_token_expiry_seconds = 60 * 60 * 24 * 7 * 2; // 2 weeks
+    $refresh_token_expiry = date('Y-m-d H:i:s',strtotime('+1 year',strtotime($current_time)));
+    $refresh_token_expiry_seconds = 60 * 60 * 24 * 365;
     
   }
   catch (PDOException $e) {
@@ -128,12 +130,12 @@ function handle_post($db) {
       ) VALUES (
         :userid,
         :access_token,
-        DATE_ADD(NOW(), INTERVAL :access_token_expiry_seconds SECOND),
+        :access_token_expiry,
         :refresh_token,
-        DATE_ADD(NOW(), INTERVAL :refresh_token_expiry_seconds SECOND)
+        :refresh_token_expiry
       )
     ');
-    $query->execute([$returned_id, $access_token, $access_token_expiry_seconds, $refresh_token, $refresh_token_expiry_seconds]);
+    $query->execute([$returned_id, $access_token, $access_token_expiry, $refresh_token, $refresh_token_expiry]);
 
     $last_session_id = $db->lastInsertId();
 
@@ -240,17 +242,20 @@ function handle_patch($db) {
       if (strtotime($returned_refresh_token_expiry) < time()) returnErrorResponse(401, 'Refresh token has expired - please log in again');
 
       // create access token and refresh token - add unix time to end to eliminate chance of stale token usage
+      $current_time = date('Y-m-d H:i:s',strtotime('+0 seconds',time()));
       $access_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24)).time());
-      $access_token_expiry_seconds = 60 * 60; // 1 hour
+      $access_token_expiry = date('Y-m-d H:i:s',strtotime('+1 hour',strtotime($current_time)));
+      $access_token_expiry_seconds = 60 * 60;
       $refresh_token = base64_encode(bin2hex(openssl_random_pseudo_bytes(24)).time());
-      $refresh_token_expiry_seconds = 60 * 60 * 24 * 7 * 2; // 2 weeks
+      $refresh_token_expiry = date('Y-m-d H:i:s',strtotime('+1 year',strtotime($current_time)));
+      $refresh_token_expiry_seconds = 60 * 60 * 24 * 365;
 
       $query = $db->prepare('
         UPDATE sessions
         SET accesstoken = :access_token,
-            accesstokenexpiry = DATE_ADD(NOW(), INTERVAL :access_token_expiry_seconds SECOND),
+            accesstokenexpiry = :access_token_expiry,
             refreshtoken = :refresh_token,
-            refreshtokenexpiry = DATE_ADD(NOW(), INTERVAL :refresh_token_expiry_seconds SECOND)
+            refreshtokenexpiry = :refresh_token_expiry
         WHERE id = :returned_session_id
         AND userid = :returned_user_id
         AND accesstoken = :returned_access_token
@@ -260,7 +265,7 @@ function handle_patch($db) {
         $access_token,
         $access_token_expiry_seconds,
         $refresh_token,
-        $refresh_token_expiry_seconds,
+        $refresh_token_expiry,
         $returned_session_id,
         $returned_user_id,
         $returned_access_token,
